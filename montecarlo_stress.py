@@ -1,51 +1,49 @@
-import datetime
-import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import yfinance as yf
 
-plt.style.use('fivethirtyeight')
+# Parâmetros
+n_simulacoes = 10000  # Número de simulações
+n_dias = 75  # Número de dias de negociação no período
 
-# Set start and end dates for retrieving stock price data
-start_date = datetime.datetime(2023, 1, 17)
-end_date = datetime.datetime(2023, 5, 20)
+# Obter dados históricos
+ticker = 'ITUB3.SA'
+start_date = '2023-01-17'
+end_date = '2023-05-20'
 
-# Retrieve stock price data for the specified ticker symbol
-ticker_symbol = 'ITUB4.SA'
-stock = yf.download(ticker_symbol, start=start_date, end=end_date)
-precos = stock["Close"]
+data = yf.download(ticker, start=start_date, end=end_date)
+prices = data['Close']
 
-returns = precos.pct_change()
-ultimo_preco = precos[-1]
+# Definir valor inicial como o fechamento de 20/05/2023
+valor_inicial = prices[-1]
 
-# Number of simulations and days
-num_simulations = 1000
-num_days = 22
+# Cálculo da taxa de retorno esperada e volatilidade
+returns = prices.pct_change().dropna()
+taxa_retorno = np.mean(returns) * 252  # Taxa de retorno esperada (retorno médio anualizado)
+volatilidade = np.std(returns) * np.sqrt(252)  # Volatilidade anualizada
 
-simulacao_df = pd.DataFrame()
+# Simulação de Monte Carlo
+simulacoes = np.zeros((n_simulacoes, n_dias))
+simulacoes[:, 0] = valor_inicial
 
-for x in range(num_simulations):
-    count = 0
-    daily_vol = returns.std()
-    preco_series = []
+for i in range(n_simulacoes):
+    for j in range(1, n_dias):
+        retorno = np.random.normal(taxa_retorno / n_dias, volatilidade / np.sqrt(n_dias))
+        simulacoes[i, j] = simulacoes[i, j - 1] * (1 + retorno)
 
-    preco = ultimo_preco * (1 + np.random.normal(0, daily_vol))
-    preco_series.append(preco)
+# Cálculo do VaR
+nivel_confianca = 0.95  # Nível de confiança
+simulacoes_finais = simulacoes[:, -1]
+simulacoes_finais_ordenadas = np.sort(simulacoes_finais)
+var_posicao = int(n_simulacoes * (1 - nivel_confianca))
+var = simulacoes_finais_ordenadas[var_posicao]
 
-    for y in range(num_days):
-        preco = preco_series[count] * (1 + np.random.normal(0, daily_vol))
-        preco_series.append(preco)
-
-        count += 1
-
-        if count == num_days - 1:
-            break
-
-    simulacao_df[x] = preco_series
-
-# Plot the simulated price data
-simulacao_df.plot(figsize=(10, 6))
-plt.xlabel('Days')
-plt.ylabel('Simulated Price')
-plt.title('Monte Carlo Simulation')
+# Plot dos resultados
+plt.figure(figsize=(12, 6))
+plt.plot(simulacoes.T)
+plt.xlabel('Dia')
+plt.ylabel('Preço')
+plt.title(f'Simulação de Monte Carlo - ITUB3\nVaR ({nivel_confianca*100}%): {var:.2f}')
+plt.grid(True)
 plt.show()
